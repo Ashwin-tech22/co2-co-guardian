@@ -28,29 +28,27 @@ interface FineRecord {
 
 const FineCalculator = ({ latestReading }: Props) => {
   const [fineRecords, setFineRecords] = useState<FineRecord[]>([]);
-  const [currentFine, setCurrentFine] = useState({ co2: 0, co: 0, total: 0 });
+  const [todaysFine, setTodaysFine] = useState({ co2: 0, co: 0, total: 0 });
   const [selectedMonth, setSelectedMonth] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [lastFineDate, setLastFineDate] = useState<string | null>(null);
 
-  // Government of India standards for vehicle emissions
   const STANDARDS = {
-    CO2_MAX: 10,     // ppm
-    CO_MAX: 1,       // ppm
-    CO2_FINE_RATE: 500, // ₹500 per 1000 ppm excess
-    CO_FINE_RATE: 1000  // ₹1000 per 100 ppm excess
+    CO2_MAX: 10,
+    CO_MAX: 1,
+    CO2_FINE_RATE: 500,
+    CO_FINE_RATE: 1000
   };
 
   const calculateFine = (co2Level: number, coLevel: number) => {
     let co2Fine = 0;
     let coFine = 0;
 
-    // Calculate CO2 fine
     if (co2Level > STANDARDS.CO2_MAX) {
       const excess = co2Level - STANDARDS.CO2_MAX;
       co2Fine = Math.ceil(excess / 1000) * STANDARDS.CO2_FINE_RATE;
     }
 
-    // Calculate CO fine
     if (coLevel > STANDARDS.CO_MAX) {
       const excess = coLevel - STANDARDS.CO_MAX;
       coFine = Math.ceil(excess / 100) * STANDARDS.CO_FINE_RATE;
@@ -64,106 +62,78 @@ const FineCalculator = ({ latestReading }: Props) => {
   };
 
   const saveFineRecord = async (fine: any, reading: Reading) => {
-    // Just refresh the display records
-    if (fine.total > 0) {
+    if (fine.total === 0) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (lastFineDate !== today) {
+      setTodaysFine(fine);
+      setLastFineDate(today);
+      
+      const fineRecord = {
+        date: today,
+        co2_fine: fine.co2,
+        co_fine: fine.co,
+        total_fine: fine.total,
+        co2_level: reading.co2_level,
+        co_level: reading.co_level
+      };
+      
+      const existingFines = JSON.parse(localStorage.getItem('dailyFines') || '[]');
+      const updatedFines = existingFines.filter((f: any) => f.date !== today);
+      updatedFines.push(fineRecord);
+      localStorage.setItem('dailyFines', JSON.stringify(updatedFines));
+      
       loadFineRecords();
     }
   };
 
   const loadFineRecords = async () => {
-    // Generate mock fine records from recent readings for display
-    try {
-      const { data: readings, error } = await supabase
-        .from('air_quality_readings')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(30);
-
-      if (error) {
-        console.error('Error loading readings:', error);
-        return;
-      }
-
-      if (readings) {
-        const dailyRecords = new Map();
-        readings.forEach(reading => {
-          const date = new Date(reading.timestamp).toISOString().split('T')[0];
-          if (!dailyRecords.has(date)) {
-            const fine = calculateFine(reading.co2_level, reading.co_level);
-            if (fine.total > 0) {
-              dailyRecords.set(date, {
-                date,
-                co2_fine: fine.co2,
-                co_fine: fine.co,
-                total_fine: fine.total,
-                co2_level: reading.co2_level,
-                co_level: reading.co_level
-              });
-            }
-          }
-        });
-        setFineRecords(Array.from(dailyRecords.values()));
-      }
-    } catch (error) {
-      console.error('Error loading fine records:', error);
+    const storedFines = JSON.parse(localStorage.getItem('dailyFines') || '[]');
+    setFineRecords(storedFines.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    
+    const today = new Date().toISOString().split('T')[0];
+    const todayRecord = storedFines.find((f: any) => f.date === today);
+    
+    if (todayRecord) {
+      setTodaysFine({
+        co2: todayRecord.co2_fine,
+        co: todayRecord.co_fine,
+        total: todayRecord.total_fine
+      });
+      setLastFineDate(today);
+    } else {
+      setTodaysFine({ co2: 0, co: 0, total: 0 });
+      setLastFineDate(null);
     }
   };
 
   const downloadReport = async (monthYear: string) => {
-    console.log('Starting download for month:', monthYear);
     try {
       const [year, month] = monthYear.split('-');
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
-      console.log('Date range:', startDate.toISOString(), 'to', endDate.toISOString());
+      const storedFines = JSON.parse(localStorage.getItem('dailyFines') || '[]');
+      const monthFines = storedFines.filter((record: any) => {
+        const recordDate = new Date(record.date);
+        return recordDate.getFullYear() === parseInt(year) && recordDate.getMonth() === parseInt(month) - 1;
+      });
 
-      // Get air quality readings for selected month
-      const { data: readings, error: readingsError } = await supabase
-        .from('air_quality_readings')
-        .select('*')
-        .gte('timestamp', startDate.toISOString())
-        .lte('timestamp', endDate.toISOString())
-        .order('timestamp', { ascending: true });
-
-      console.log('Readings fetched:', readings?.length);
-      
-      if (readingsError) {
-        console.error('Error fetching readings:', readingsError);
-        alert('Error fetching data: ' + readingsError.message);
-        return;
-      }
-
-      if (!readings || readings.length === 0) {
-        alert('No data found for the selected month');
+      if (monthFines.length === 0) {
+        alert('No fine records found for the selected month');
         setIsDialogOpen(false);
         return;
       }
 
-      // Generate CSV content with daily fines
-      const csvHeader = 'Date,Time,CO2 Level (ppm),CO Level (ppm),CO2 Fine (INR),CO Fine (INR),Total Fine (INR)\n';
+      const csvHeader = 'Date,CO2 Level (ppm),CO Level (ppm),CO2 Fine (INR),CO Fine (INR),Total Fine (INR)\n';
       
-      const dailyFines = new Map();
-      const csvRows = readings.map(reading => {
-        const date = new Date(reading.timestamp);
+      const csvRows = monthFines.map((record: any) => {
+        const date = new Date(record.date);
         const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
-        const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
         
-        const fine = calculateFine(reading.co2_level, reading.co_level);
-        
-        // Only apply fine once per day
-        let dailyFine = { co2: 0, co: 0, total: 0 };
-        if (!dailyFines.has(dateStr) && fine.total > 0) {
-          dailyFines.set(dateStr, fine);
-          dailyFine = fine;
-        }
-        
-        return `${dateStr},${timeStr},${reading.co2_level},${reading.co_level},${dailyFine.co2},${dailyFine.co},${dailyFine.total}`;
+        return `${dateStr},${record.co2_level},${record.co_level},${record.co2_fine},${record.co_fine},${record.total_fine}`;
       }).join('\n');
 
       const csvContent = csvHeader + csvRows;
-      console.log('CSV content generated, length:', csvContent.length);
       
-      // Create and download file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -173,7 +143,6 @@ const FineCalculator = ({ latestReading }: Props) => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      console.log('Download initiated');
       
       setIsDialogOpen(false);
     } catch (error) {
@@ -183,11 +152,8 @@ const FineCalculator = ({ latestReading }: Props) => {
   };
 
   const handleDownload = () => {
-    console.log('Download button clicked, selected month:', selectedMonth);
     if (selectedMonth) {
       downloadReport(selectedMonth);
-    } else {
-      console.log('No month selected');
     }
   };
 
@@ -207,29 +173,39 @@ const FineCalculator = ({ latestReading }: Props) => {
 
   useEffect(() => {
     loadFineRecords();
-  }, []);
+    
+    // Check for new day and reset today's fine
+    const checkNewDay = () => {
+      const today = new Date().toISOString().split('T')[0];
+      if (lastFineDate && lastFineDate !== today) {
+        setTodaysFine({ co2: 0, co: 0, total: 0 });
+        setLastFineDate(null);
+      }
+    };
+    
+    const interval = setInterval(checkNewDay, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [lastFineDate]);
 
   useEffect(() => {
     if (latestReading) {
       const fine = calculateFine(latestReading.co2_level, latestReading.co_level);
-      setCurrentFine(fine);
-      saveFineRecord(fine, latestReading);
+      
+      const today = new Date().toISOString().split('T')[0];
+      if (fine.total > 0 && lastFineDate !== today) {
+        saveFineRecord(fine, latestReading);
+      }
     }
-  }, [latestReading]);
+  }, [latestReading, lastFineDate]);
 
   return (
     <div className="space-y-6">
       <Card className="p-6">
         <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Emission Fine Calculator</h2>
-              <p className="text-base text-gray-600">
-                Based on Government of India vehicle emission standards
-              </p>
-            </div>
-
-          </div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Emission Fine Calculator</h2>
+          <p className="text-base text-gray-600">
+            Based on Government of India vehicle emission standards
+          </p>
         </div>
 
         {!latestReading ? (
@@ -268,16 +244,19 @@ const FineCalculator = ({ latestReading }: Props) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">CO2 Fine</p>
-                    <p className="text-lg font-semibold text-red-700">₹{currentFine.co2.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-red-700">₹{todaysFine.co2.toLocaleString()}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">CO Fine</p>
-                    <p className="text-lg font-semibold text-red-700">₹{currentFine.co.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-red-700">₹{todaysFine.co.toLocaleString()}</p>
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-red-200">
                   <p className="text-sm text-gray-600">Total Today</p>
-                  <p className="text-xl font-bold text-red-800">₹{currentFine.total.toLocaleString()}</p>
+                  <p className="text-xl font-bold text-red-800">₹{todaysFine.total.toLocaleString()}</p>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  Resets daily at midnight
                 </div>
               </div>
               <div className="p-5 bg-orange-50 rounded-lg border border-orange-200">
@@ -356,7 +335,7 @@ const FineCalculator = ({ latestReading }: Props) => {
               <tbody>
                 {fineRecords.map((record, index) => (
                   <tr key={index} className="border-b border-gray-100">
-                    <td className="py-2 text-gray-800">{record.date}</td>
+                    <td className="py-2 text-gray-800">{new Date(record.date).toLocaleDateString('en-GB')}</td>
                     <td className="text-right py-2 text-gray-700">{record.co2_level.toFixed(1)}</td>
                     <td className="text-right py-2 text-gray-700">{record.co_level.toFixed(1)}</td>
                     <td className="text-right py-2 font-semibold text-red-700">

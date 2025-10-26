@@ -131,13 +131,8 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Test Button */}
-        <div className="mb-6 text-center animate-fade-in-up" style={{animationDelay: '0.4s'}}>
-          <Button onClick={testDataSend} variant="outline" className="gap-2 hover-scale btn-animate hover-glow">
-            <TestTube className="h-4 w-4" />
-            Send Test Data
-          </Button>
-        </div>
+       
+        
 
         {/* Current Metrics */}
         <div className="animate-fade-in-up" style={{animationDelay: '0.6s'}}>

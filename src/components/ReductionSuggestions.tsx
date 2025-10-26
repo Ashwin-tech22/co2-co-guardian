@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { Lightbulb, Loader2, Leaf } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getReductionSuggestions } from "@/services/geminiService";
 
 interface Reading {
   id: string;
@@ -33,16 +33,8 @@ const ReductionSuggestions = ({ latestReading }: Props) => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-reduction-suggestions', {
-        body: { 
-          co2_level: latestReading.co2_level,
-          co_level: latestReading.co_level 
-        }
-      });
-
-      if (error) throw error;
-
-      setSuggestions(data.suggestions);
+      const reductionSuggestions = await getReductionSuggestions(latestReading.co2_level, latestReading.co_level);
+      setSuggestions(reductionSuggestions);
     } catch (error) {
       console.error('Error generating suggestions:', error);
       toast({
@@ -89,11 +81,41 @@ const ReductionSuggestions = ({ latestReading }: Props) => {
                 <p className="ml-3 text-muted-foreground">Generating personalized suggestions...</p>
               </div>
             ) : suggestions ? (
-              <div className="prose prose-sm max-w-none">
-                <div className="p-5 bg-success/5 rounded-lg border border-success/20">
-                  <div className="whitespace-pre-wrap text-foreground leading-relaxed">
-                    {suggestions}
-                  </div>
+              <div className="p-5 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="text-gray-800 leading-relaxed text-base space-y-4">
+                  {suggestions.split('\n').map((paragraph, index) => {
+                    if (!paragraph.trim()) return null;
+                    
+                    // Clean up the text by removing markdown symbols and extra spaces
+                    const cleanText = paragraph
+                      .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove ** bold markers
+                      .replace(/\*([^*]+)\*/g, '$1') // Remove * italic markers
+                      .replace(/---+/g, '') // Remove horizontal lines
+                      .replace(/#{1,6}\s*/g, '') // Remove # headers
+                      .replace(/&quot;/g, '"') // Replace HTML entities
+                      .replace(/&amp;/g, '&') // Replace HTML entities
+                      .replace(/&lt;/g, '<') // Replace HTML entities
+                      .replace(/&gt;/g, '>') // Replace HTML entities
+                      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                      .trim();
+                    
+                    if (!cleanText) return null;
+                    
+                    // Style different types of content
+                    if (cleanText.includes(':') && cleanText.length < 100) {
+                      return (
+                        <h3 key={index} className="font-semibold text-gray-900 text-lg">
+                          {cleanText}
+                        </h3>
+                      );
+                    }
+                    
+                    return (
+                      <p key={index} className="text-gray-700">
+                        {cleanText}
+                      </p>
+                    );
+                  })}
                 </div>
               </div>
             ) : (

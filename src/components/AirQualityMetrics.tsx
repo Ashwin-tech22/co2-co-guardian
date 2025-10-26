@@ -30,9 +30,9 @@ const getAirQualityLevel = (co2: number, co: number) => {
 const AirQualityMetrics = ({ latestReading }: Props) => {
   if (!latestReading) {
     return (
-      <Card className="p-8 shadow-card animate-fade-in">
+      <Card className="p-8 shadow-card animate-fade-in-up card-hover">
         <div className="text-center text-muted-foreground">
-          <Wind className="h-16 w-16 mx-auto mb-4 opacity-50" />
+          <Wind className="h-16 w-16 mx-auto mb-4 opacity-50 animate-pulse-custom" />
           <p className="text-lg">Waiting for sensor data...</p>
           <p className="text-sm mt-2">Your ESP32 will send data shortly</p>
         </div>
@@ -43,10 +43,10 @@ const AirQualityMetrics = ({ latestReading }: Props) => {
   const quality = getAirQualityLevel(latestReading.co2_level, latestReading.co_level);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in-up">
       {/* Overall Air Quality */}
       <Card className={cn(
-        "p-6 shadow-card border-2 transition-all duration-300",
+        "p-6 shadow-card border-2 transition-all duration-300 card-hover animate-glow",
         quality.color === "destructive" && "border-destructive",
         quality.color === "warning" && "border-warning",
         quality.color === "success" && "border-success",

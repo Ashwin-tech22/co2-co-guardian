@@ -64,51 +64,70 @@ const HealthImpact = ({ latestReading }: Props) => {
   return (
     <div className="space-y-6 animate-fade-in">
       <Card className="p-6 shadow-card">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 rounded-xl bg-destructive/10">
-            <Heart className="h-6 w-6 text-destructive" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Health Impact Analysis</h2>
-            <p className="text-sm text-muted-foreground">
-              AI-powered assessment of potential health effects
-            </p>
-          </div>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Health Impact Analysis</h2>
+          <p className="text-base text-gray-600">
+            Assessment of potential health effects
+          </p>
         </div>
 
         {!latestReading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No sensor data available yet</p>
+          <div className="text-center py-8">
+            <p className="text-base text-gray-600">No sensor data available yet</p>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-                <p className="text-sm text-muted-foreground mb-1">Current CO₂</p>
-                <p className="text-2xl font-bold text-foreground">
+              <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                <p className="text-base text-gray-700 mb-1">Current CO2</p>
+                <p className="text-xl font-semibold text-gray-800">
                   {latestReading.co2_level.toFixed(1)} ppm
                 </p>
               </div>
-              <div className="p-4 rounded-lg bg-accent/5 border border-accent/20">
-                <p className="text-sm text-muted-foreground mb-1">Current CO</p>
-                <p className="text-2xl font-bold text-foreground">
+              <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+                <p className="text-base text-gray-700 mb-1">Current CO</p>
+                <p className="text-xl font-semibold text-gray-800">
                   {latestReading.co_level.toFixed(1)} ppm
                 </p>
               </div>
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-3 text-muted-foreground">Analyzing health impacts...</p>
+              <div className="text-center py-12">
+                <p className="text-base text-gray-600">Analyzing health impacts...</p>
               </div>
             ) : analysis ? (
-              <div className="prose prose-sm max-w-none">
-                <div className="p-5 bg-muted/50 rounded-lg border border-border">
-                  <div className="whitespace-pre-wrap text-foreground leading-relaxed">
-                    {analysis}
-                  </div>
+              <div className="p-5 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="text-gray-800 leading-relaxed text-base space-y-4">
+                  {analysis.split('\n').map((paragraph, index) => {
+                    if (!paragraph.trim()) return null;
+                    
+                    // Clean up the text by removing markdown symbols and extra spaces
+                    const cleanText = paragraph
+                      .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove ** bold markers
+                      .replace(/\*([^*]+)\*/g, '$1') // Remove * italic markers
+                      .replace(/---+/g, '') // Remove horizontal lines
+                      .replace(/#{1,6}\s*/g, '') // Remove # headers
+                      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                      .trim();
+                    
+                    if (!cleanText) return null;
+                    
+                    // Style different types of content
+                    if (cleanText.includes(':') && cleanText.length < 100) {
+                      return (
+                        <h3 key={index} className="font-semibold text-gray-900 text-lg">
+                          {cleanText}
+                        </h3>
+                      );
+                    }
+                    
+                    return (
+                      <p key={index} className="text-gray-700">
+                        {cleanText}
+                      </p>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -120,17 +139,14 @@ const HealthImpact = ({ latestReading }: Props) => {
         )}
       </Card>
 
-      <Card className="p-6 shadow-card bg-warning/5 border-warning/20">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-foreground">
-            <p className="font-semibold mb-2">Important Notice</p>
-            <p className="text-muted-foreground">
-              This analysis is for informational purposes only. If you experience severe symptoms
-              like dizziness, nausea, or difficulty breathing, seek immediate medical attention
-              and move to fresh air.
-            </p>
-          </div>
+      <Card className="p-6 shadow-card bg-yellow-50 border-yellow-200">
+        <div className="text-base text-gray-800">
+          <p className="font-semibold mb-2">Important Notice</p>
+          <p className="text-gray-700">
+            This analysis is for informational purposes only. If you experience severe symptoms
+            like dizziness, nausea, or difficulty breathing, seek immediate medical attention
+            and move to fresh air.
+          </p>
         </div>
       </Card>
     </div>

@@ -8,22 +8,39 @@ interface SensorData {
 
 class MQTTClient {
   private client: mqtt.MqttClient | null = null;
+  private isConnecting = false;
 
   connect() {
+    if (this.client?.connected) {
+      console.log('MQTT already connected');
+      return;
+    }
+    
+    if (this.isConnecting) {
+      console.log('MQTT connection already in progress');
+      return;
+    }
+    
+    this.isConnecting = true;
+
+    const brokerUrl = 'wss://37cbb6eafd9c4d98bc51cd9cd50b2d09.s1.eu.hivemq.cloud:8884/mqtt';
+    
     const options = {
-      host: '37cbb6eafd9c4d98bc51cd9cd50b2d09.s1.eu.hivemq.cloud',
-      port: 8884,
-      protocol: 'wss' as const,
       username: 'Ashwin',
       password: 'asHwin#13',
       clean: true,
       reconnectPeriod: 5000,
+      connectTimeout: 30000,
+      keepalive: 60,
+      clientId: 'web_client_' + Math.random().toString(16).substr(2, 8)
     };
 
-    this.client = mqtt.connect(options);
+    console.log('🔌 Connecting to MQTT broker:', brokerUrl);
+    this.client = mqtt.connect(brokerUrl, options);
 
     this.client.on('connect', () => {
       console.log('✅ MQTT connected successfully');
+      this.isConnecting = false;
       this.client?.subscribe('emissionchecker/airquality', (err) => {
         if (err) console.error('❌ Subscribe error:', err);
         else console.log('✅ Subscribed to emissionchecker/airquality topic');
@@ -46,7 +63,17 @@ class MQTTClient {
     });
 
     this.client.on('error', (error) => {
-      console.error('MQTT error:', error);
+      console.error('❌ MQTT error:', error);
+      this.isConnecting = false;
+    });
+
+    this.client.on('disconnect', () => {
+      console.log('🔌 MQTT disconnected');
+      this.isConnecting = false;
+    });
+
+    this.client.on('reconnect', () => {
+      console.log('🔄 MQTT reconnecting...');
     });
   }
 
@@ -68,7 +95,16 @@ class MQTTClient {
   }
 
   disconnect() {
-    this.client?.end();
+    if (this.client) {
+      console.log('🔌 Disconnecting MQTT client');
+      this.client.end();
+      this.client = null;
+      this.isConnecting = false;
+    }
+  }
+
+  isConnected(): boolean {
+    return this.client?.connected || false;
   }
 }
 

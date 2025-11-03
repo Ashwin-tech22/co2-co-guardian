@@ -9,6 +9,7 @@ import { Session } from "@supabase/supabase-js";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./components/Auth";
+import { mqttClient } from "./services/mqttClient";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,9 @@ const App = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
+      if (session) {
+        mqttClient.connect();
+      }
     });
 
     const {
@@ -27,9 +31,17 @@ const App = () => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setLoading(false);
+      if (session) {
+        mqttClient.connect();
+      } else {
+        mqttClient.disconnect();
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      mqttClient.disconnect();
+    };
   }, []);
 
   if (loading) {
@@ -60,7 +72,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route path="/" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

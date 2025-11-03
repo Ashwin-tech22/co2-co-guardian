@@ -9,6 +9,7 @@ import HealthImpact from "@/components/HealthImpact";
 import ReductionSuggestions from "@/components/ReductionSuggestions";
 import FineCalculator from "@/components/FineCalculator";
 import ThreeBackground from "@/components/ThreeBackground";
+import { mqttClient } from "@/services/mqttClient";
 import { Wind, Activity, TestTube, IndianRupee, LogOut } from "lucide-react";
 
 
@@ -23,13 +24,40 @@ interface Reading {
 const Index = () => {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [latestReading, setLatestReading] = useState<Reading | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+  const [mqttStatus, setMqttStatus] = useState('Disconnected');
 
   useEffect(() => {
+    // Clear any corrupted auth data and force fresh session
+    const initAuth = async () => {
+      try {
+        // Clear local storage auth data
+        localStorage.removeItem('supabase.auth.token');
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session) {
+          console.log('No valid session, signing out...');
+          await supabase.auth.signOut();
+          return;
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        await supabase.auth.signOut();
+      }
+    };
+    
+    initAuth();
+    
     // Fetch initial data
     fetchReadings();
 
     // Set up polling as backup
     const pollInterval = setInterval(fetchReadings, 5000);
+    
+    // Check MQTT status
+    const mqttStatusInterval = setInterval(() => {
+      setMqttStatus(mqttClient.isConnected() ? 'Connected' : 'Disconnected');
+    }, 2000);
 
     // Subscribe to real-time updates
     const channel = supabase
@@ -43,17 +71,19 @@ const Index = () => {
         },
         (payload) => {
           const newReading = payload.new as Reading;
-          console.log('⚡ Real-time update received:', newReading);
+          console.log('📡 New sensor data received:', newReading);
           setReadings(prev => [newReading, ...prev].slice(0, 100));
           setLatestReading(newReading);
         }
       )
       .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
+        console.log('🔗 Realtime connection status:', status);
+        setConnectionStatus(status);
       });
 
     return () => {
       clearInterval(pollInterval);
+      clearInterval(mqttStatusInterval);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -71,7 +101,6 @@ const Index = () => {
     }
 
     if (data && data.length > 0) {
-      console.log('📊 Latest reading from DB:', data[0]);
       setReadings(data);
       setLatestReading(data[0]);
     }
@@ -131,8 +160,31 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-       
-        
+        {/* Test Button and Status */}
+        <div className="mb-6 text-center animate-fade-in-up" style={{animationDelay: '0.4s'}}>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="text-sm text-gray-600">
+              Supabase: <span className={connectionStatus === 'SUBSCRIBED' ? 'text-green-600' : 'text-yellow-600'}>
+                {connectionStatus === 'SUBSCRIBED' ? 'Connected' : 'Connecting...'}
+              </span>
+            </div>
+            <div className="text-sm text-gray-600">
+              MQTT: <span className={mqttStatus === 'Connected' ? 'text-green-600' : 'text-red-600'}>
+                {mqttStatus}
+              </span>
+            </div>
+            <div className="text-sm text-gray-600">
+              Last Update: {latestReading ? new Date(latestReading.timestamp).toLocaleTimeString() : 'Never'}
+            </div>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <Button onClick={testDataSend} variant="outline" className="gap-2 hover-scale btn-animate hover-glow">
+              <TestTube className="h-4 w-4" />
+              Send Test Data
+            </Button>
+
+          </div>
+        </div>
 
         {/* Current Metrics */}
         <div className="animate-fade-in-up" style={{animationDelay: '0.6s'}}>
